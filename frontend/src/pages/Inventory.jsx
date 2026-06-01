@@ -116,8 +116,8 @@ export default function Inventory() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage ingredient stock levels</p>
+          <h1 className="text-2xl font-bold" style={{color:'var(--ink)'}}>Inventory</h1>
+          <p className="text-sm mt-0.5" style={{color:'var(--muted)'}}>Manage ingredient stock levels</p>
         </div>
         <button onClick={openAdd} className="btn-primary flex items-center gap-2">
           <span>+ Add Item</span>
@@ -144,7 +144,8 @@ export default function Inventory() {
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
           {[{ key: 'all', label: 'All Items' }, { key: 'low', label: `⚠️ Low Stock (${lowCount})` }].map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === f.key ? 'bg-white shadow text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filter === f.key ? 'bg-white shadow' : ''}` }
+              style={{color: filter === f.key ? 'var(--chilli)' : 'var(--muted)'}}>
               {f.label}
             </button>
           ))}
@@ -162,8 +163,8 @@ export default function Inventory() {
           <div key={s.label} className="card p-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.bg} flex items-center justify-center text-lg`}>{s.icon}</div>
             <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{s.label}</div>
-              <div className="text-xl font-bold text-gray-800">{s.value}</div>
+              <div className="text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>{s.label}</div>
+              <div className="text-xl font-bold" style={{color:'var(--ink)'}}>{s.value}</div>
             </div>
           </div>
         ))}
@@ -191,11 +192,11 @@ export default function Inventory() {
                 )}
                 {visible.map(item => (
                   <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="table-cell font-semibold text-gray-800">{item.ingredient_name}</td>
-                    <td className="table-cell text-center text-gray-500">{item.unit}</td>
-                    <td className="table-cell text-center font-bold text-gray-700">{item.current_stock}</td>
-                    <td className="table-cell text-center text-gray-500">{item.minimum_stock}</td>
-                    <td className="table-cell text-center text-gray-500">
+                    <td className="table-cell font-semibold" style={{color:'var(--ink)'}}>{item.ingredient_name}</td>
+                    <td className="table-cell text-center" style={{color:'var(--muted)'}}>{item.unit}</td>
+                    <td className="table-cell text-center font-bold" style={{color:'var(--ink)'}}>{item.current_stock}</td>
+                    <td className="table-cell text-center" style={{color:'var(--muted)'}}>{item.minimum_stock}</td>
+                    <td className="table-cell text-center" style={{color:'var(--muted)'}}>
                       {item.cost_per_unit ? `₹${item.cost_per_unit}` : '—'}
                     </td>
                     <td className="table-cell text-center">

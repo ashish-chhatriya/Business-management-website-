@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Sales from './pages/Sales'
+import Shops from './pages/Shops'
 import Expenses from './pages/Expenses'
 import Purchases from './pages/Purchases'
 import Inventory from './pages/Inventory'
@@ -17,8 +18,8 @@ import Settings from './pages/Settings'
 function PrivateRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth()
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-gray-50">
-      <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+    <div className="flex items-center justify-center h-screen bg-[#fff8ed]">
+      <div className="w-8 h-8 border-4 border-yellow-200 border-t-[#D62828] rounded-full animate-spin" />
     </div>
   )
   if (!user) return <Navigate to="/login" replace />
@@ -34,8 +35,9 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
 
-      <Route path="/" element={<PrivateRoute><Layout><Dashboard /></Layout></PrivateRoute>} />
+      <Route path="/" element={<PrivateRoute><Layout>{user?.role === 'employee' ? <Sales /> : <Dashboard />}</Layout></PrivateRoute>} />
       <Route path="/sales" element={<PrivateRoute><Layout><Sales /></Layout></PrivateRoute>} />
+      <Route path="/shops" element={<PrivateRoute adminOnly><Layout><Shops /></Layout></PrivateRoute>} />
       <Route path="/expenses" element={<PrivateRoute><Layout><Expenses /></Layout></PrivateRoute>} />
       <Route path="/purchases" element={<PrivateRoute><Layout><Purchases /></Layout></PrivateRoute>} />
       <Route path="/inventory" element={<PrivateRoute><Layout><Inventory /></Layout></PrivateRoute>} />

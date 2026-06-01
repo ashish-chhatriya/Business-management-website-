@@ -10,12 +10,16 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    const normalizedEmail = email.toLowerCase().trim();
+    const candidateEmails = [normalizedEmail];
 
     const { rows } = await pool.query(
       `SELECT u.*, d.name as domain_name, d.slug as domain_slug
        FROM users u JOIN domains d ON u.domain_id = d.id
-       WHERE u.email = $1 AND u.is_active = TRUE`,
-      [email.toLowerCase().trim()]
+       WHERE u.email = ANY($1) AND u.is_active = TRUE
+       ORDER BY CASE WHEN u.email=$2 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [candidateEmails, normalizedEmail]
     );
     const user = rows[0];
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
@@ -42,6 +46,7 @@ router.post('/login', async (req, res) => {
         domain_id: user.domain_id,
         domain_name: user.domain_name,
         domain_slug: user.domain_slug,
+        shop_id: user.shop_id || null,
       }
     });
   } catch (err) {
@@ -52,7 +57,7 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', auth, async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.email, u.role, u.domain_id, d.name as domain_name, d.slug as domain_slug, u.last_login
+    `SELECT u.id, u.name, u.email, u.role, u.domain_id, u.shop_id, d.name as domain_name, d.slug as domain_slug, u.last_login
      FROM users u JOIN domains d ON u.domain_id = d.id WHERE u.id=$1`,
     [req.user.id]
   );
@@ -63,9 +68,12 @@ router.get('/me', auth, async (req, res) => {
 router.get('/users', auth, requireAdmin, async (req, res) => {
   const domainId = req.user.role === 'superadmin' ? req.query.domain_id : req.user.domain_id;
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.email, u.role, u.is_active, u.last_login, d.name as domain_name
-     FROM users u JOIN domains d ON u.domain_id = d.id
-     WHERE ($1::uuid IS NULL OR u.domain_id = $1) ORDER BY u.created_at`,
+    `SELECT u.id, u.name, u.email, u.role, u.is_active, u.last_login, u.shop_id, s.name as shop_name, d.name as domain_name
+     FROM users u
+     JOIN domains d ON u.domain_id = d.id
+     LEFT JOIN shops s ON u.shop_id = s.id
+     WHERE ($1::uuid IS NULL OR u.domain_id = $1)
+     ORDER BY u.created_at`,
     [domainId || null]
   );
   res.json(rows);
@@ -74,18 +82,35 @@ router.get('/users', auth, requireAdmin, async (req, res) => {
 // POST /api/auth/users (admin only)
 router.post('/users', auth, requireAdmin, async (req, res) => {
   try {
-    const { name, email, password, role, domain_id } = req.body;
+    const { name, email, password, role, domain_id, shop_id } = req.body;
     if (!name || !email || !password || !role) return res.status(400).json({ error: 'All fields required' });
 
     // Managers can only be created within same domain
     const targetDomain = req.user.role === 'superadmin' ? domain_id : req.user.domain_id;
-    if (!['admin', 'manager'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    if (!['admin', 'manager', 'employee'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+
+    if (role === 'employee' && !shop_id) {
+      return res.status(400).json({ error: 'Employee must be assigned to a shop' });
+    }
+
+    let validatedShopId = null;
+    if (role === 'employee') {
+      const shopCheck = await pool.query(
+        'SELECT id FROM shops WHERE id=$1 AND domain_id=$2 AND is_active=TRUE',
+        [shop_id, targetDomain]
+      );
+      if (!shopCheck.rows[0]) {
+        return res.status(400).json({ error: 'Invalid shop selected for employee' });
+      }
+      validatedShopId = shopCheck.rows[0].id;
+    }
 
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await pool.query(
-      `INSERT INTO users (id, domain_id, name, email, password_hash, role)
-       VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5) RETURNING id, name, email, role`,
-      [targetDomain, name, email.toLowerCase(), hash, role]
+      `INSERT INTO users (id, domain_id, shop_id, name, email, password_hash, role)
+       VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
+       RETURNING id, name, email, role, shop_id`,
+      [targetDomain, validatedShopId, name, email.toLowerCase(), hash, role]
     );
     await auditLog(targetDomain, req.user.id, req.user.name, 'User Created', 'Auth', rows[0].id, `Created ${role}: ${email}`, req.ip);
     res.status(201).json(rows[0]);

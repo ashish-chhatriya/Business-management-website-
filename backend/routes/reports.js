@@ -18,6 +18,15 @@ function expPeriodParam(period, date) {
   /* month */            return { fragment: `to_char(expense_date,'YYYY-MM') = $2`,       value: date.slice(0, 7) };
 }
 
+function getEmployeeShopFilter(req, params) {
+  if (req.user.role !== 'employee') return '';
+  if (!req.user.shop_id) {
+    throw new Error('Employee must be assigned to a shop');
+  }
+  params.push(req.user.shop_id);
+  return ` AND shop_id = $${params.length}`;
+}
+
 // ─── GET /api/reports/sales/summary ──────────────────────────────────────────
 // Used by Reports.jsx:  api.get('/reports/sales/summary', { params: { period, date } })
 // Returns: { total_sales, total_orders, cash, upi, card, bank_transfer }
@@ -27,6 +36,8 @@ router.get('/sales/summary', auth, scopeDomain, async (req, res) => {
     const { period = 'month', date = new Date().toISOString().slice(0, 7) } = req.query;
     const { fragment, value } = salesPeriodParam(period, date);
 
+    const params = [domainId, value];
+    const shopFilter = getEmployeeShopFilter(req, params);
     const { rows } = await pool.query(
       `SELECT
          COALESCE(SUM(total_amount), 0)                                                 AS total_sales,
@@ -36,8 +47,8 @@ router.get('/sales/summary', auth, scopeDomain, async (req, res) => {
          COALESCE(SUM(CASE WHEN payment_mode='Card'          THEN total_amount END), 0) AS card,
          COALESCE(SUM(CASE WHEN payment_mode='Bank Transfer' THEN total_amount END), 0) AS bank_transfer
        FROM sales
-       WHERE domain_id=$1 AND is_deleted=FALSE AND ${fragment}`,
-      [domainId, value]
+       WHERE domain_id=$1 AND is_deleted=FALSE AND ${fragment}${shopFilter}`,
+      params
     );
 
     const r = rows[0];
@@ -66,41 +77,100 @@ router.get('/sales/chart', auth, scopeDomain, async (req, res) => {
 
     if (period === 'day') {
       // Hourly buckets for a single date
+      params = [domainId, date];
+      const shopFilter = getEmployeeShopFilter(req, params);
       sql = `
         SELECT to_char(sale_time, 'HH12AM')  AS label,
                COALESCE(SUM(total_amount), 0) AS value
         FROM   sales
-        WHERE  domain_id=$1 AND is_deleted=FALSE AND sale_date=$2
+        WHERE  domain_id=$1 AND is_deleted=FALSE AND sale_date=$2${shopFilter}
         GROUP  BY label, EXTRACT(HOUR FROM sale_time)
         ORDER  BY EXTRACT(HOUR FROM sale_time)`;
-      params = [domainId, date];
 
     } else if (period === 'year') {
-      // Monthly buckets for a calendar year
+      params = [domainId, parseInt(date, 10)];
+      const shopFilter = getEmployeeShopFilter(req, params);
       sql = `
         SELECT to_char(sale_date, 'Mon')      AS label,
                COALESCE(SUM(total_amount), 0) AS value
         FROM   sales
         WHERE  domain_id=$1 AND is_deleted=FALSE
-          AND  EXTRACT(YEAR FROM sale_date) = $2
+          AND  EXTRACT(YEAR FROM sale_date) = $2${shopFilter}
         GROUP  BY EXTRACT(MONTH FROM sale_date), to_char(sale_date, 'Mon')
         ORDER  BY EXTRACT(MONTH FROM sale_date)`;
-      params = [domainId, parseInt(date, 10)];
 
     } else {
-      // Daily buckets for a month (YYYY-MM)
+      params = [domainId, date.slice(0, 7)];
+      const shopFilter = getEmployeeShopFilter(req, params);
       sql = `
         SELECT to_char(sale_date, 'DD')       AS label,
                COALESCE(SUM(total_amount), 0) AS value
         FROM   sales
         WHERE  domain_id=$1 AND is_deleted=FALSE
-          AND  to_char(sale_date, 'YYYY-MM') = $2
+          AND  to_char(sale_date, 'YYYY-MM') = $2${shopFilter}
         GROUP  BY sale_date ORDER BY sale_date`;
-      params = [domainId, date.slice(0, 7)];
     }
 
     const { rows } = await pool.query(sql, params);
     res.json(rows.map(r => ({ label: r.label, value: parseFloat(r.value) || 0 })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/reports/sales/by-shop?period=day|month|year|custom&date=&from=&to=&shop_id=
+router.get('/sales/by-shop', auth, scopeDomain, async (req, res) => {
+  try {
+    const domainId = req.domainId;
+    const { period = 'month', date = new Date().toISOString().slice(0, 7), from, to, shop_id } = req.query;
+    const conditions = ['s.domain_id=$1', 's.is_deleted=FALSE'];
+    const params = [domainId];
+
+    if (period === 'custom') {
+      if (from) { params.push(from); conditions.push(`s.sale_date >= $${params.length}`); }
+      if (to) { params.push(to); conditions.push(`s.sale_date <= $${params.length}`); }
+    } else if (period === 'day') {
+      params.push(date);
+      conditions.push(`s.sale_date = $${params.length}`);
+    } else if (period === 'year') {
+      params.push(parseInt(date, 10));
+      conditions.push(`EXTRACT(YEAR FROM s.sale_date) = $${params.length}`);
+    } else {
+      params.push(date.slice(0, 7));
+      conditions.push(`to_char(s.sale_date,'YYYY-MM') = $${params.length}`);
+    }
+
+    if (shop_id) {
+      params.push(shop_id);
+      conditions.push(`s.shop_id = $${params.length}`);
+    }
+    const shopFilter = getEmployeeShopFilter(req, params);
+    if (shopFilter) conditions.push(shopFilter.replace(' AND ', '')); // remove redundant AND prefix for conditions array
+
+    const { rows } = await pool.query(
+      `SELECT s.sale_date::text AS date,
+              to_char(s.sale_time, 'HH24:MI') AS time,
+              COALESCE(sh.name, d.name) AS shop,
+              COALESCE(SUM(s.total_amount),0) AS total,
+              s.payment_mode AS mode,
+              COUNT(*) AS records
+       FROM sales s
+       LEFT JOIN shops sh ON s.shop_id=sh.id
+       JOIN domains d ON s.domain_id=d.id
+       WHERE ${conditions.join(' AND ')}
+       GROUP BY s.sale_date, to_char(s.sale_time, 'HH24:MI'), COALESCE(sh.name, d.name), s.payment_mode
+       ORDER BY s.sale_date DESC, time DESC, shop`,
+      params
+    );
+
+    res.json(rows.map(r => ({
+      date: r.date,
+      time: r.time,
+      shop: r.shop,
+      total: parseFloat(r.total) || 0,
+      mode: r.mode,
+      records: parseInt(r.records) || 0,
+    })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

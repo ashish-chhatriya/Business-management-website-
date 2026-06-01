@@ -109,10 +109,11 @@ function BusinessInfoTab({ user }) {
 /* ─── User Management Tab ─── */
 function UserManagementTab({ user: currentUser }) {
   const [users, setUsers] = useState([])
+  const [shops, setShops] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [pwModal, setPwModal] = useState(null)   // { id, name }
-  const [form, setForm] = useState({ name:'', email:'', password:'', role:'manager' })
+  const [form, setForm] = useState({ name:'', email:'', password:'', role:'employee', shop_id:'' })
   const [pwForm, setPwForm] = useState({ password:'', confirm:'' })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -121,16 +122,20 @@ function UserManagementTab({ user: currentUser }) {
     setLoading(true)
     api.get('/auth/users').then(({ data }) => setUsers(data)).finally(() => setLoading(false))
   }
+  useEffect(() => {
+    api.get('/shops').then(({ data }) => setShops(data)).catch(() => {})
+  }, [])
   useEffect(load, [])
 
   const createUser = async () => {
     if (!form.name || !form.email || !form.password) return setErr('All fields are required')
     if (form.password.length < 6) return setErr('Password must be at least 6 characters')
+    if (form.role === 'employee' && !form.shop_id) return setErr('Select a shop for this employee')
     setSaving(true); setErr('')
     try {
       await api.post('/auth/users', form)
       setModalOpen(false)
-      setForm({ name:'', email:'', password:'', role:'manager' })
+      setForm({ name:'', email:'', password:'', role:'employee', shop_id:'' })
       load()
     } catch (e) {
       setErr(e.response?.data?.error || 'Failed to create user')
@@ -181,12 +186,16 @@ function UserManagementTab({ user: currentUser }) {
                 )}
               </div>
               <div className="text-xs text-gray-400">{u.email}</div>
+              {u.shop_name && (
+                <div className="text-xs text-gray-500 mt-0.5">Shop: {u.shop_name}</div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                 u.role === 'superadmin' ? 'bg-purple-100 text-purple-700'
                 : u.role === 'admin'   ? 'bg-orange-100 text-orange-700'
-                : 'bg-blue-100 text-blue-700'
+                : u.role === 'manager' ? 'bg-blue-100 text-blue-700'
+                : 'bg-green-100 text-green-700'
               }`}>{u.role}</span>
 
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
@@ -234,11 +243,22 @@ function UserManagementTab({ user: currentUser }) {
               onChange={e => setForm({ ...form, password: e.target.value })}/>
           </FormField>
           <FormField label="Role">
-            <select className="input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+            <select className="input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value, shop_id: e.target.value === 'employee' ? form.shop_id : '' })}>
+              <option value="employee">Employee</option>
               <option value="manager">Manager</option>
               {currentUser?.role === 'superadmin' && <option value="admin">Admin</option>}
             </select>
           </FormField>
+          {form.role === 'employee' && (
+            <FormField label="Assigned Shop">
+              <select className="input" value={form.shop_id} onChange={e => setForm({ ...form, shop_id: e.target.value })}>
+                <option value="">Select shop</option>
+                {shops.map(shop => (
+                  <option key={shop.id} value={shop.id}>{shop.name}</option>
+                ))}
+              </select>
+            </FormField>
+          )}
           {err && <div className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{err}</div>}
           <div className="flex gap-2 pt-1">
             <button onClick={createUser} disabled={saving} className="btn-primary flex-1 py-2">

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import api from '../utils/api'
 import { fmt, fmtDate, today } from '../utils/fmt'
+import { downloadCsv, downloadTemplate } from '../utils/csv'
 import { Modal, Spinner, Empty } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 
 const UNITS = ['kg', 'g', 'litre', 'ml', 'piece', 'packet', 'bag', 'box', 'dozen', 'bundle']
+const PURCHASE_TEMPLATE_HEADERS = ['ingredient_name','vendor_name','quantity','unit','price_paid','purchase_date','purchase_time','bill_number','notes']
 
 export default function Purchases() {
   const { user } = useAuth()
@@ -85,6 +87,32 @@ export default function Purchases() {
   }
 
   const totalSpent = rows.reduce((s, r) => s + parseFloat(r.price_paid || 0), 0)
+  const downloadPurchaseTemplate = () => downloadTemplate('purchases-template.csv', PURCHASE_TEMPLATE_HEADERS, {
+    ingredient_name: 'Potato',
+    vendor_name: 'Local Vendor',
+    quantity: '25',
+    unit: 'kg',
+    price_paid: '900',
+    purchase_date: today(),
+    purchase_time: '09:30',
+    bill_number: 'BILL-1001',
+    notes: 'Morning stock',
+  })
+  const downloadPurchaseHistory = () => downloadCsv('purchases-history.csv',
+    ['purchase_code', ...PURCHASE_TEMPLATE_HEADERS],
+    rows.map(r => ({
+      purchase_code: r.purchase_code,
+      ingredient_name: r.ingredient_name,
+      vendor_name: r.vendor_name || '',
+      quantity: r.quantity,
+      unit: r.unit || '',
+      price_paid: r.price_paid,
+      purchase_date: r.purchase_date?.slice(0,10),
+      purchase_time: r.purchase_time,
+      bill_number: r.bill_number || '',
+      notes: r.notes || '',
+    }))
+  )
 
   return (
     <div className="space-y-6">
@@ -93,9 +121,13 @@ export default function Purchases() {
           <h1 className="text-2xl font-bold text-gray-800">Purchases</h1>
           <p className="text-sm text-gray-500 mt-0.5">Track ingredient & stock purchases</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
-          <span className="text-lg leading-none">+</span> Add Purchase
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={downloadPurchaseTemplate} className="btn-secondary">Download Template</button>
+          <button onClick={downloadPurchaseHistory} className="btn-secondary" disabled={!rows.length}>Download History</button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+            <span className="text-lg leading-none">+</span> Add Purchase
+          </button>
+        </div>
       </div>
 
       {/* Summary */}

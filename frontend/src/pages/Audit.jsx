@@ -105,8 +105,8 @@ export default function Audit() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Audit Log</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Complete trail of all system activity</p>
+        <h1 className="text-2xl font-bold" style={{color:'var(--ink)'}}>Audit Log</h1>
+        <p className="text-sm mt-0.5" style={{color:'var(--muted)'}}>Complete trail of all system activity</p>
       </div>
 
       {/* Filters */}
@@ -171,18 +171,18 @@ export default function Audit() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-40">Timestamp</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">User</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Module</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Details</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">IP Address</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>Timestamp</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>User</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>Action</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>Module</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{color:'var(--muted)'}}>Details</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide w-28" style={{color:'var(--muted)'}}>IP Address</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {logs.map((log, i) => (
                   <tr key={log.id} className={`hover:bg-gray-50 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap font-mono">
+                    <td className="px-4 py-3 text-xs whitespace-nowrap font-mono" style={{color:'var(--muted)'}}>
                       {fmtTs(log.created_at)}
                     </td>
                     <td className="px-4 py-3">
@@ -190,7 +190,7 @@ export default function Audit() {
                         <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
                           {log.user_name?.[0]?.toUpperCase() || '?'}
                         </div>
-                        <span className="font-medium text-gray-700 text-xs whitespace-nowrap">{log.user_name || 'System'}</span>
+                        <span className="font-medium text-xs whitespace-nowrap" style={{color:'var(--ink)'}}>{log.user_name || 'System'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -199,10 +199,10 @@ export default function Audit() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <ModuleBadge module={log.module}/>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate" title={log.details}>
+                    <td className="px-4 py-3 text-xs max-w-xs truncate" style={{color:'var(--muted)'}} title={log.details}>
                       {log.details || '—'}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+                    <td className="px-4 py-3 text-xs font-mono whitespace-nowrap" style={{color:'var(--muted)'}}>
                       {log.ip_address || '—'}
                     </td>
                   </tr>
@@ -216,7 +216,7 @@ export default function Audit() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">
+          <span className="text-sm" style={{color:'var(--muted)'}}>
             Page {page} of {totalPages}
           </span>
           <div className="flex gap-1">

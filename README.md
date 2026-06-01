@@ -1,6 +1,6 @@
-# Business Management Website
+# Business Management System
 
-Full-stack business management app.
+Full-stack restaurant ERP for sales, inventory, attendance, salary, expenses, purchases, audit logs, reports, and dashboard monitoring.
 
 | Layer    | Technology              | Deploy target  |
 |----------|-------------------------|----------------|
@@ -150,6 +150,8 @@ Neon requires SSL in production. The backend already enables SSL when
 | *      | `/api/domains`                 | Domain management            |
 | *      | `/api/employees`               | Employee records             |
 | *      | `/api/sales`                   | Sales records                |
+| POST   | `/api/sales/import`            | Import sales CSV records     |
+| *      | `/api/shops`                   | Shop/location management     |
 | *      | `/api/expenses`                | Expense records              |
 | *      | `/api/purchases`               | Purchase records             |
 | *      | `/api/inventory`               | Inventory management         |
@@ -188,6 +190,9 @@ Business-management-website/
 
 ## Notes
 
+- Sales CSV format is `Date,Time,Shop,Total,Mode`.
+- Shop-wise sales uses a nullable `sales.shop_id` column. Existing sales without
+  a shop continue to display under the current branch/domain name.
 - `backend/routes/inventory (1).js` is a duplicate candidate. Only
   `inventory.js` is registered in `server.js`. Do not delete the copy
   until you have verified their contents match.

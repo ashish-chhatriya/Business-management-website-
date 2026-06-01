@@ -57,8 +57,8 @@ export default function Employees() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Employees</h1>
-          <p className="text-sm text-gray-500">{rows.length} employees</p>
+          <h1 className="text-2xl font-bold" style={{color:'var(--ink)'}}>Employees</h1>
+          <p className="text-sm" style={{color:'var(--muted)'}}>{rows.length} employees</p>
         </div>
         {isAdmin && <button onClick={openAdd} className="btn-primary">+ Add Employee</button>}
       </div>
@@ -80,32 +80,32 @@ export default function Employees() {
                     {r.name?.[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <div className="font-bold text-gray-800">{r.name}</div>
-                    <div className="text-xs text-gray-400 font-mono">{r.emp_code}</div>
+                    <div className="font-bold" style={{color:'var(--ink)'}}>{r.name}</div>
+                    <div className="text-xs" style={{color:'var(--muted)'}}>{r.emp_code}</div>
                   </div>
                 </div>
                 <Badge status={r.status}/>
               </div>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Role</span>
+                  <span style={{color:'var(--muted)'}}>Role</span>
                   <span className="font-medium">{r.designation||'—'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Salary</span>
+                  <span style={{color:'var(--muted)'}}>Salary</span>
                   <span className="font-semibold text-green-700">{fmt(r.monthly_salary)}/mo</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Phone</span>
+                  <span style={{color:'var(--muted)'}}>Phone</span>
                   <span>{r.phone||'—'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Joined</span>
+                  <span style={{color:'var(--muted)'}}>Joined</span>
                   <span>{fmtDate(r.joining_date)}</span>
                 </div>
                 {r.fingerprint_id && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Fingerprint</span>
+                    <span style={{color:'var(--muted)'}}>Fingerprint</span>
                     <span className="font-mono text-xs">{r.fingerprint_id}</span>
                   </div>
                 )}

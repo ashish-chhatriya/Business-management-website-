@@ -3,6 +3,182 @@ const pool   = require('../db/pool');
 const { auth, scopeDomain, requireAdmin } = require('../middleware/auth');
 const { auditLog } = require('../middleware/audit');
 
+function normalizeYearMonth(year, month) {
+  const y = String(year || '').trim();
+  const m = String(month || '').trim().padStart(2, '0');
+  if (!/^[0-9]{4}$/.test(y) || !/^(0[1-9]|1[0-2])$/.test(m)) {
+    return null;
+  }
+  return `${y}-${m}`;
+}
+
+async function verifyEmployee(domainId, employeeId) {
+  const { rows } = await pool.query(
+    'SELECT id FROM employees WHERE id=$1 AND domain_id=$2 AND is_deleted=FALSE',
+    [employeeId, domainId]
+  );
+  return rows[0];
+}
+
+// GET /api/salary/matrix
+// Returns a year grid of salary payment status for employees
+router.get('/matrix', auth, scopeDomain, async (req, res) => {
+  try {
+    const domainId = req.domainId;
+    const year = req.query.year || new Date().getFullYear().toString();
+    const employeeId = req.query.employee_id;
+
+    const params = [domainId, year];
+    let employeeFilter = '';
+    if (employeeId) {
+      params.push(employeeId);
+      employeeFilter = ` AND e.id=$${params.length}`;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT e.id AS employee_id, e.emp_code, e.name,
+              sm.pay_month, sm.is_paid
+       FROM employees e
+       LEFT JOIN salary_matrix sm
+         ON sm.employee_id=e.id AND sm.domain_id=$1 AND sm.pay_year=$2
+       WHERE e.domain_id=$1 AND e.is_deleted=FALSE${employeeFilter}
+       ORDER BY e.emp_code, e.name`,
+      params
+    );
+
+    const result = [];
+    const lookup = {};
+    rows.forEach((row) => {
+      if (!lookup[row.employee_id]) {
+        lookup[row.employee_id] = {
+          employee_id: row.employee_id,
+          emp_code: row.emp_code,
+          name: row.name,
+          months: {},
+        };
+        result.push(lookup[row.employee_id]);
+      }
+      if (row.pay_month) {
+        lookup[row.employee_id].months[row.pay_month] = row.is_paid === true;
+      }
+    });
+
+    result.forEach((row) => {
+      for (let month = 1; month <= 12; month += 1) {
+        const key = `${year}-${String(month).padStart(2, '0')}`;
+        if (!(key in row.months)) {
+          row.months[key] = false;
+        }
+      }
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/salary/matrix/:employee_id
+router.get('/matrix/:employee_id', auth, scopeDomain, async (req, res) => {
+  try {
+    const domainId = req.domainId;
+    const year = req.query.year || new Date().getFullYear().toString();
+    const employeeId = req.params.employee_id;
+
+    if (!await verifyEmployee(domainId, employeeId)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT pay_month, is_paid FROM salary_matrix
+       WHERE domain_id=$1 AND employee_id=$2 AND pay_year=$3
+       ORDER BY pay_month`,
+      [domainId, employeeId, year]
+    );
+
+    const months = {};
+    for (let month = 1; month <= 12; month += 1) {
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      months[key] = false;
+    }
+    rows.forEach((row) => {
+      months[row.pay_month] = row.is_paid === true;
+    });
+
+    res.json({ employee_id: employeeId, year, months });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/salary/matrix/:employee_id/:year/:month/paid
+router.put('/matrix/:employee_id/:year/:month/paid', auth, scopeDomain, requireAdmin, async (req, res) => {
+  try {
+    const domainId = req.domainId;
+    const employeeId = req.params.employee_id;
+    const payMonth = normalizeYearMonth(req.params.year, req.params.month);
+    if (!payMonth) return res.status(400).json({ error: 'Invalid year or month' });
+
+    if (!await verifyEmployee(domainId, employeeId)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO salary_matrix
+         (id, domain_id, employee_id, pay_year, pay_month, is_paid, paid_at, created_by, updated_by)
+       VALUES
+         (uuid_generate_v4(), $1, $2, $3, $4, TRUE, NOW(), $5, $5)
+       ON CONFLICT (domain_id, employee_id, pay_month)
+       DO UPDATE SET
+         is_paid=TRUE,
+         paid_at=NOW(),
+         updated_by=$5,
+         updated_at=NOW()
+       RETURNING *`,
+      [domainId, employeeId, req.params.year, payMonth, req.user.id]
+    );
+
+    await auditLog(domainId, req.user.id, req.user.name, 'Salary Matrix Paid', 'Salary', rows[0].id, `Marked paid for ${employeeId} ${payMonth}`, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/salary/matrix/:employee_id/:year/:month/unpaid
+router.put('/matrix/:employee_id/:year/:month/unpaid', auth, scopeDomain, requireAdmin, async (req, res) => {
+  try {
+    const domainId = req.domainId;
+    const employeeId = req.params.employee_id;
+    const payMonth = normalizeYearMonth(req.params.year, req.params.month);
+    if (!payMonth) return res.status(400).json({ error: 'Invalid year or month' });
+
+    if (!await verifyEmployee(domainId, employeeId)) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO salary_matrix
+         (id, domain_id, employee_id, pay_year, pay_month, is_paid, paid_at, created_by, updated_by)
+       VALUES
+         (uuid_generate_v4(), $1, $2, $3, $4, FALSE, NULL, $5, $5)
+       ON CONFLICT (domain_id, employee_id, pay_month)
+       DO UPDATE SET
+         is_paid=FALSE,
+         paid_at=NULL,
+         updated_by=$5,
+         updated_at=NOW()
+       RETURNING *`,
+      [domainId, employeeId, req.params.year, payMonth, req.user.id]
+    );
+
+    await auditLog(domainId, req.user.id, req.user.name, 'Salary Matrix Unpaid', 'Salary', rows[0].id, `Marked unpaid for ${employeeId} ${payMonth}`, req.ip);
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/salary
 // Returns salary payment records for a given month (defaults to current month)
 // ?month=YYYY-MM  ?employee_id=uuid  ?is_paid=true|false

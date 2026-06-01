@@ -127,8 +127,8 @@ export default function Attendance() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Attendance</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Track employee attendance daily or monthly</p>
+          <h1 className="text-2xl font-bold" style={{color:'var(--ink)'}}>Attendance</h1>
+          <p className="text-sm mt-0.5" style={{color:'var(--muted)'}}>Track employee attendance daily or monthly</p>
         </div>
         <div className="flex gap-2">
           {tab === 'daily' && !bulkMode && (
@@ -211,10 +211,10 @@ export default function Attendance() {
                     {rows.map(emp => (
                       <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="table-cell">
-                          <div className="font-semibold text-gray-800">{emp.name}</div>
-                          <div className="text-xs text-gray-400">{emp.emp_code}</div>
+                          <div className="font-semibold" style={{color:'var(--ink)'}}>{emp.name}</div>
+                          <div className="text-xs" style={{color:'var(--muted)'}}>{emp.emp_code}</div>
                         </td>
-                        <td className="table-cell text-gray-500">{emp.designation || '—'}</td>
+                        <td className="table-cell" style={{color:'var(--muted)'}}>{emp.designation || '—'}</td>
                         <td className="table-cell text-center">
                           {bulkMode ? (
                             <select value={bulkData[emp.id]?.status || 'present'}
@@ -226,21 +226,21 @@ export default function Attendance() {
                             emp.att ? <Badge status={emp.att.status} /> : <span className="badge-gray">Unmarked</span>
                           )}
                         </td>
-                        <td className="table-cell text-center text-gray-500">
+                        <td className="table-cell text-center" style={{color:'var(--muted)'}}>
                           {bulkMode ? (
                             <input type="time" value={bulkData[emp.id]?.check_in || ''}
                               onChange={e => setBulkData(p => ({ ...p, [emp.id]: { ...p[emp.id], check_in: e.target.value } }))}
                               className="input text-xs py-1 w-28" />
                           ) : fmtTime(emp.att?.check_in)}
                         </td>
-                        <td className="table-cell text-center text-gray-500">
+                        <td className="table-cell text-center" style={{color:'var(--muted)'}}>
                           {bulkMode ? (
                             <input type="time" value={bulkData[emp.id]?.check_out || ''}
                               onChange={e => setBulkData(p => ({ ...p, [emp.id]: { ...p[emp.id], check_out: e.target.value } }))}
                               className="input text-xs py-1 w-28" />
                           ) : fmtTime(emp.att?.check_out)}
                         </td>
-                        <td className="table-cell text-center text-gray-500">
+                        <td className="table-cell text-center" style={{color:'var(--muted)'}}>
                           {emp.att?.working_hours != null ? `${emp.att.working_hours}h` : '—'}
                         </td>
                         {!bulkMode && (
@@ -281,8 +281,8 @@ export default function Attendance() {
                     {summary.map(s => (
                       <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="table-cell">
-                          <div className="font-semibold text-gray-800">{s.name}</div>
-                          <div className="text-xs text-gray-400">{s.emp_code} · {s.designation || '—'}</div>
+                          <div className="font-semibold" style={{color:'var(--ink)'}}>{s.name}</div>
+                          <div className="text-xs" style={{color:'var(--muted)'}}>{s.emp_code} · {s.designation || '—'}</div>
                         </td>
                         <td className="table-cell text-center">
                           <span className="badge-green">{s.present_days}</span>

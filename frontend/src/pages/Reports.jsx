@@ -6,6 +6,7 @@ import {
 } from 'chart.js'
 import api from '../utils/api'
 import { fmt, fmtDate, thisMonth } from '../utils/fmt'
+import { downloadCsv } from '../utils/csv'
 import { Spinner } from '../components/ui'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler)
@@ -14,38 +15,52 @@ const PERIODS = [
   { label: 'This Month', value: 'month' },
   { label: 'This Year',  value: 'year'  },
   { label: 'Today',      value: 'day'   },
+  { label: 'Custom',     value: 'custom' },
 ]
 
 export default function Reports() {
   const [period, setPeriod]       = useState('month')
   const [date, setDate]           = useState(thisMonth())
   const [loading, setLoading]     = useState(true)
+  const [from, setFrom]           = useState('')
+  const [to, setTo]               = useState('')
+  const [shopId, setShopId]       = useState('')
+  const [shops, setShops]         = useState([])
 
   const [salesSum, setSalesSum]       = useState(null)
   const [expSum, setExpSum]           = useState([])
   const [salesChart, setSalesChart]   = useState([])
+  const [salesByShop, setSalesByShop] = useState([])
   const [attendance, setAttendance]   = useState([])
   const [purchases, setPurchases]     = useState([])
 
   const load = () => {
     setLoading(true)
     const p = { period, date }
+    const shopParams = period === 'custom'
+      ? { period, from, to, shop_id: shopId || undefined }
+      : { period, date, shop_id: shopId || undefined }
     Promise.all([
       api.get('/sales/summary',  { params: p }),
       api.get('/expenses/summary', { params: p }),
       api.get('/sales/chart',    { params: p }),
+      api.get('/reports/sales/by-shop', { params: shopParams }),
       api.get('/attendance/summary', { params: { month: date.slice(0,7) } }),
       api.get('/purchases',      { params: period === 'month' ? { from: date+'-01', to: date+'-31' } : {} }),
-    ]).then(([ss, es, sc, att, pur]) => {
+    ]).then(([ss, es, sc, shopSales, att, pur]) => {
       setSalesSum(ss.data)
       setExpSum(es.data)
       setSalesChart(sc.data)
+      setSalesByShop(shopSales.data)
       setAttendance(att.data)
       setPurchases(pur.data)
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [period, date])
+  useEffect(() => {
+    api.get('/shops').then(r => setShops(r.data))
+  }, [])
+  useEffect(() => { load() }, [period, date, from, to, shopId])
 
   const totalExpenses = expSum.reduce((s, r) => s + parseFloat(r.total || 0), 0)
   const totalPurchases = purchases.reduce((s, r) => s + parseFloat(r.price_paid || 0), 0)
@@ -84,6 +99,22 @@ export default function Reports() {
   const totalPresent  = attendance.reduce((s, e) => s + parseInt(e.present_days || 0), 0)
   const totalHalfDays = attendance.reduce((s, e) => s + parseInt(e.half_days || 0), 0)
   const totalAbsent   = attendance.reduce((s, e) => s + parseInt(e.absent_days || 0), 0)
+  const shopTotals = salesByShop.reduce((map, row) => {
+    map[row.shop] = (map[row.shop] || 0) + parseFloat(row.total || 0)
+    return map
+  }, {})
+  const shopComparisonData = {
+    labels: Object.keys(shopTotals),
+    datasets: [{
+      label: 'Sales by Shop',
+      data: Object.values(shopTotals),
+      backgroundColor: '#D62828',
+      borderRadius: 6,
+    }]
+  }
+  const exportShopReport = () => downloadCsv('sales-by-shop-report.csv', ['Date','Time','Shop','Total','Mode'],
+    salesByShop.map(r => ({ Date: r.date?.slice(0,10), Time: r.time, Shop: r.shop, Total: r.total, Mode: r.mode }))
+  )
 
   return (
     <div className="space-y-6">
@@ -102,14 +133,26 @@ export default function Reports() {
               </button>
             ))}
           </div>
-          <input
-            type={period === 'month' ? 'month' : period === 'year' ? 'number' : 'date'}
-            className="input w-40"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            min={period === 'year' ? '2020' : undefined}
-            max={period === 'year' ? new Date().getFullYear().toString() : undefined}
-          />
+          {period === 'custom' ? (
+            <>
+              <input type="date" className="input w-40" value={from} onChange={e => setFrom(e.target.value)} />
+              <input type="date" className="input w-40" value={to} onChange={e => setTo(e.target.value)} />
+            </>
+          ) : (
+            <input
+              type={period === 'month' ? 'month' : period === 'year' ? 'number' : 'date'}
+              className="input w-40"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              min={period === 'year' ? '2020' : undefined}
+              max={period === 'year' ? new Date().getFullYear().toString() : undefined}
+            />
+          )}
+          <select className="input w-52" value={shopId} onChange={e=>setShopId(e.target.value)}>
+            <option value="">All Shops</option>
+            {shops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+          </select>
+          <button className="btn-secondary" onClick={exportShopReport} disabled={!salesByShop.length}>Export CSV</button>
         </div>
       </div>
 
@@ -159,6 +202,55 @@ export default function Reports() {
                   ? <Doughnut data={doughnutData} options={{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:10 } } } } }} />
                   : <div className="flex items-center justify-center h-full text-gray-400 text-sm">No expense data</div>}
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="card p-5 lg:col-span-2">
+              <h3 className="font-semibold text-gray-700 mb-4">Sales Comparison Between Shops</h3>
+              <div className="h-56">
+                {Object.keys(shopTotals).length > 0
+                  ? <Bar data={shopComparisonData} options={chartOpts} />
+                  : <div className="flex items-center justify-center h-full text-gray-400 text-sm">No shop sales data</div>}
+              </div>
+            </div>
+            <div className="card p-5">
+              <h3 className="font-semibold text-gray-700 mb-4">Top Performing Shop</h3>
+              {Object.entries(shopTotals).sort((a,b)=>b[1]-a[1]).slice(0,1).map(([shop,total]) => (
+                <div key={shop} className="rounded-lg bg-[#fff0b0] border border-[#FFC300] p-4">
+                  <div className="text-sm font-bold text-[#7a5400]">{shop}</div>
+                  <div className="text-2xl font-black text-[#D62828] mt-2">{fmt(total)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-700">Sales by Shop</h3>
+              <button className="btn-secondary" onClick={exportShopReport} disabled={!salesByShop.length}>Export Filtered CSV</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['Date','Time','Shop','Total','Mode'].map(h => <th key={h} className="table-header text-left">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {salesByShop.length ? salesByShop.map((r, idx) => (
+                    <tr key={`${r.date}-${r.time}-${r.shop}-${idx}`} className="hover:bg-gray-50">
+                      <td className="table-cell">{fmtDate(r.date)}</td>
+                      <td className="table-cell">{r.time}</td>
+                      <td className="table-cell font-semibold text-gray-800">{r.shop}</td>
+                      <td className="table-cell font-bold text-[#D62828]">{fmt(r.total)}</td>
+                      <td className="table-cell">{r.mode}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan="5" className="table-cell text-center text-gray-400 py-8">No sales found for this filter</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 

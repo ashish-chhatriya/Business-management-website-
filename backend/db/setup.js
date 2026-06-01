@@ -19,19 +19,34 @@ CREATE TABLE IF NOT EXISTS domains (
 );
 
 -- ─────────────────────────────────────────────
--- USERS (Admin / Manager per domain)
+-- USERS (Owner / Manager / Employee per domain)
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   domain_id UUID NOT NULL REFERENCES domains(id),
+  shop_id UUID REFERENCES shops(id),
   name VARCHAR(100) NOT NULL,
   email VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('superadmin','admin','manager')),
+  role VARCHAR(20) NOT NULL CHECK (role IN ('superadmin','admin','manager','employee')),
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('superadmin','admin','manager','employee'));
+
+CREATE TABLE IF NOT EXISTS shops (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  domain_id UUID NOT NULL REFERENCES domains(id),
+  name VARCHAR(120) NOT NULL,
+  address TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(domain_id, name)
 );
 
 -- ─────────────────────────────────────────────
@@ -64,6 +79,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS sales (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   domain_id UUID NOT NULL REFERENCES domains(id),
+  shop_id UUID REFERENCES shops(id),
   sale_code VARCHAR(20) NOT NULL,
   sale_date DATE NOT NULL,
   sale_time TIME NOT NULL,
@@ -87,10 +103,14 @@ CREATE TABLE IF NOT EXISTS expenses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   domain_id UUID NOT NULL REFERENCES domains(id),
   expense_code VARCHAR(20) NOT NULL,
-  category VARCHAR(50) NOT NULL CHECK (category IN ('Electricity','Water','Rent','Gas','Maintenance','Repairs','Miscellaneous','Ingredients')),
+  category VARCHAR(50) NOT NULL CHECK (category IN ('Gas','Electricity','Eggs','Chicken','Oil','Flour','Vegetables','Rent','Internet','Staff Food','Miscellaneous','Electricity','Water','Maintenance','Repairs','Ingredients')),
   amount NUMERIC(12,2) NOT NULL,
+  quantity NUMERIC(10,2),
+  unit VARCHAR(50),
+  unit_price NUMERIC(12,2),
   expense_date DATE NOT NULL,
   expense_time TIME NOT NULL,
+  is_paid BOOLEAN DEFAULT FALSE,
   notes TEXT,
   bill_url TEXT,
   is_deleted BOOLEAN DEFAULT FALSE,
@@ -99,6 +119,12 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add new columns to existing table if not present
+ALTER TABLE IF EXISTS expenses ADD COLUMN IF NOT EXISTS quantity NUMERIC(10,2);
+ALTER TABLE IF EXISTS expenses ADD COLUMN IF NOT EXISTS unit VARCHAR(50);
+ALTER TABLE IF EXISTS expenses ADD COLUMN IF NOT EXISTS unit_price NUMERIC(12,2);
+ALTER TABLE IF EXISTS expenses ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;
 
 -- ─────────────────────────────────────────────
 -- INGREDIENT PURCHASES
@@ -188,6 +214,26 @@ CREATE TABLE IF NOT EXISTS salary_payments (
 );
 
 -- ─────────────────────────────────────────────
+-- SALARY MATRIX
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS salary_matrix (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  domain_id UUID NOT NULL REFERENCES domains(id),
+  employee_id UUID NOT NULL REFERENCES employees(id),
+  pay_year VARCHAR(4) NOT NULL,
+  pay_month VARCHAR(7) NOT NULL,
+  is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+  paid_at TIMESTAMPTZ,
+  created_by UUID REFERENCES users(id),
+  updated_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(domain_id, employee_id, pay_month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_salary_matrix_domain_year ON salary_matrix(domain_id, pay_year);
+
+-- ─────────────────────────────────────────────
 -- EMPLOYEE ADVANCES
 -- ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS employee_advances (
@@ -223,6 +269,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- INDEXES
 -- ─────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sales_domain_date ON sales(domain_id, sale_date);
+CREATE INDEX IF NOT EXISTS idx_sales_domain_shop_date ON sales(domain_id, shop_id, sale_date);
+CREATE INDEX IF NOT EXISTS idx_shops_domain ON shops(domain_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_expenses_domain_date ON expenses(domain_id, expense_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_domain_date ON attendance(domain_id, att_date);
 CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_id);

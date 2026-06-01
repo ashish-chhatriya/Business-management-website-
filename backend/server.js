@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const ensureShopSchema = require('./db/ensureShopSchema');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/auth',       require('./routes/auth'));
 app.use('/api/domains',    require('./routes/domains'));
 app.use('/api/employees',  require('./routes/employees'));
 app.use('/api/sales',      require('./routes/sales'));
+app.use('/api/shops',      require('./routes/shops'));
 app.use('/api/expenses',   require('./routes/expenses'));
 app.use('/api/purchases',  require('./routes/purchases'));
 app.use('/api/inventory',  require('./routes/inventory'));
@@ -56,5 +58,13 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 QuickBite ERP server running on port ${PORT}`));
+
+ensureShopSchema()
+  .then(() => {
+    app.listen(PORT, () => console.log(`Business Management System server running on port ${PORT}`));
+  })
+  .catch((err) => {
+    console.error('Database startup check failed:', err.message);
+    process.exit(1);
+  });
 

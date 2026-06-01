@@ -42,18 +42,32 @@ router.post('/', auth, requireAdmin, scopeDomain, async (req, res) => {
     // Auto-generate emp_code if not provided
     let code = emp_code;
     if (!code) {
-      const { rows: last } = await pool.query(
-        `SELECT emp_code FROM employees WHERE domain_id=$1 ORDER BY created_at DESC LIMIT 1`, [req.domainId]
-      );
-      const n = last[0] ? parseInt(last[0].emp_code.replace(/\D/g,'')) + 1 : 1;
-      code = `EMP-${String(n).padStart(3, '0')}`;
-    }
+    const { rows: last } = await pool.query(
+  `SELECT emp_code
+   FROM employees
+   WHERE domain_id = $1
+   ORDER BY CAST(REGEXP_REPLACE(emp_code, '[^0-9]', '', 'g') AS INTEGER) DESC
+   LIMIT 1`,
+  [req.domainId]
+);
 
-    const { rows } = await pool.query(
-      `INSERT INTO employees (id, domain_id, emp_code, name, phone, address, designation, monthly_salary, joining_date, fingerprint_id, created_by)
-       VALUES (uuid_generate_v4(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.domainId, code, name, phone, address, designation, monthly_salary, joining_date || null, fingerprint_id || null, req.user.id]
-    );
+const n = last.length
+  ? parseInt(last[0].emp_code.replace(/\D/g, '')) + 1
+  : 1;
+
+code = `EMP-${String(n).padStart(3, '0')}`;
+
+console.log('Generated code:', code);
+console.log('DOMAIN ID:', req.domainId);
+    }
+console.log('DOMAIN ID:', req.domainId);
+console.log('USER:', req.user);
+
+const { rows } = await pool.query(
+  `INSERT INTO employees (id, domain_id, emp_code, name, phone, address, designation, monthly_salary, joining_date, fingerprint_id, created_by)
+   VALUES (uuid_generate_v4(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+  [req.domainId, code, name, phone, address, designation, monthly_salary, joining_date || null, fingerprint_id || null, req.user.id]
+);
     await auditLog(req.domainId, req.user.id, req.user.name, 'Employee Added', 'Employees', rows[0].id, `Added: ${name}`, req.ip);
     res.status(201).json(rows[0]);
   } catch (err) {

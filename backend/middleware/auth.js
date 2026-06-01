@@ -8,7 +8,7 @@ const auth = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const { rows } = await pool.query(
-      'SELECT id, domain_id, name, email, role, is_active FROM users WHERE id=$1',
+      'SELECT id, domain_id, shop_id, name, email, role, is_active FROM users WHERE id=$1',
       [decoded.userId]
     );
     if (!rows[0] || !rows[0].is_active) {
@@ -37,11 +37,11 @@ const requireSuperAdmin = (req, res, next) => {
 
 // Auto-scope all queries to user's domain (unless superadmin)
 const scopeDomain = (req, res, next) => {
-  if (req.user.role === 'superadmin') {
-    req.domainId = req.query.domain_id || req.body.domain_id || null;
-  } else {
-    req.domainId = req.user.domain_id;
-  }
+  req.domainId =
+    req.query.domain_id ||
+    req.body.domain_id ||
+    req.user.domain_id;
+
   next();
 };
 
