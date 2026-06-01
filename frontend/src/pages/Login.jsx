@@ -87,15 +87,15 @@ export default function Login() {
             </div>
 
             <h1 className="text-4xl font-black text-white leading-tight" style={{ fontFamily: 'Syne, sans-serif' }}>
-              Business<br />Dashboard
+              Anand Fast<br />Food
             </h1>
             <div className="mt-2 inline-flex items-center gap-2 bg-[#E8A020] px-3 py-1 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-white" />
-              <span className="text-[#1A1208] text-xs font-bold">Management System</span>
+              <span className="text-[#1A1208] text-xs font-bold">ERP Management System</span>
             </div>
 
             <p className="text-white/70 mt-5 text-sm leading-relaxed max-w-xs">
-              Complete business dashboard for sales, inventory, staff, payroll, and branch operations.
+              Complete restaurant management platform for sales, inventory, staff, payroll, expenses, and multi-branch operations.
             </p>
           </div>
 
@@ -121,8 +121,10 @@ export default function Login() {
                 <BrandMark small />
               </div>
               <div>
-                <div className="font-bold text-[var(--ink)]" style={{ fontFamily: 'Syne, sans-serif' }}>Business Manager</div>
-                <div className="text-xs text-[var(--muted)]">Management System</div>
+                <div className="font-bold text-[var(--ink)]" style={{ fontFamily: 'Syne, sans-serif' }}>
+                  Anand Fast Food
+                </div>
+                <div className="text-xs text-[var(--muted)]">ERP Management System</div>
               </div>
             </div>
             <ThemeToggle theme={theme} setTheme={setTheme} />
@@ -132,7 +134,9 @@ export default function Login() {
             <h2 className="text-2xl font-bold text-[var(--ink)]" style={{ fontFamily: 'Syne, sans-serif' }}>
               Welcome back
             </h2>
-            <p className="text-sm text-[var(--muted)] mt-1">Sign in to your business dashboard.</p>
+            <p className="text-sm text-[var(--muted)] mt-1">
+              Sign in to Anand Fast Food ERP.
+            </p>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-4">
