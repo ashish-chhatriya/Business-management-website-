@@ -94,7 +94,7 @@ export default function Layout({ children }) {
             </div>
             <div className="min-w-0">
               <div className="text-white font-bold text-sm leading-tight" style={{ fontFamily: 'Syne, sans-serif' }}>
-                Business Manager
+                Anand Fast Food
               </div>
               <div className="text-[#E8A020] text-xs font-medium truncate mt-0.5">
                 {user?.domain_name || 'Management System'}
