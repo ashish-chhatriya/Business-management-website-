@@ -65,7 +65,7 @@ export default function Dashboard() {
           <p className="text-sm mt-1" style={{color:'var(--muted)'}}>Today's business operations at a glance.</p>
         </div>
         <div className="rounded-lg bg-[#FFC300] px-4 py-2 text-sm font-bold text-[#3b2500]">
-          Live Business Dashboard
+          Live Anand Fast Food
         </div>
       </div>
 
