@@ -95,7 +95,7 @@ export default function Login() {
             </div>
 
             <p className="text-white/70 mt-5 text-sm leading-relaxed max-w-xs">
-              Complete restaurant management platform for sales, inventory, staff, payroll, expenses, and multi-branch operations.
+              Complete restaurant management system
             </p>
           </div>
 
@@ -124,7 +124,7 @@ export default function Login() {
                 <div className="font-bold text-[var(--ink)]" style={{ fontFamily: 'Syne, sans-serif' }}>
                   Anand Fast Food
                 </div>
-                <div className="text-xs text-[var(--muted)]">ERP Management System</div>
+                <div className="text-xs text-[var(--muted)]">Business Management System</div>
               </div>
             </div>
             <ThemeToggle theme={theme} setTheme={setTheme} />

@@ -61,7 +61,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black" style={{color:'var(--ink)'}}>Welcome to Business Management System</h1>
+          <h1 className="text-2xl font-black" style={{color:'var(--ink)'}}>Welcome to Anand Fast Food</h1>
           <p className="text-sm mt-1" style={{color:'var(--muted)'}}>Today's business operations at a glance.</p>
         </div>
         <div className="rounded-lg bg-[#FFC300] px-4 py-2 text-sm font-bold text-[#3b2500]">
