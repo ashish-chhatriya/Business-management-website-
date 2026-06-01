@@ -1,4 +1,3 @@
-console.log("DATABASE_URL exists:", !!process.env.DATABASE_URL);
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
