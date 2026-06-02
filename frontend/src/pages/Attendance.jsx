@@ -1,33 +1,31 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import api from '../utils/api'
 import { fmtTime, today, thisMonth } from '../utils/fmt'
 import { Spinner, Empty, Modal, Badge, FormField } from '../components/ui'
 
 const STATUS_OPTS = ['present', 'absent', 'half_day']
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const MONTHS     = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_NUMS = ['01','02','03','04','05','06','07','08','09','10','11','12']
 
-const statusColor = (s) => {
-  if (s === 'present')  return 'bg-green-100 text-green-700'
-  if (s === 'half_day') return 'bg-yellow-100 text-yellow-700'
-  if (s === 'absent')   return 'bg-red-100 text-red-700'
-  return 'bg-gray-100 text-gray-400'
-}
+// Days in a given month/year
+const daysInMonth = (year, monthIndex) => new Date(year, monthIndex + 1, 0).getDate()
 
 export default function Attendance() {
-  const [tab, setTab]             = useState('daily')   // 'daily' | 'monthly' | 'grid'
+  const [tab, setTab]             = useState('daily')
   const [date, setDate]           = useState(today())
   const [month, setMonth]         = useState(thisMonth())
   const [gridYear, setGridYear]   = useState(new Date().getFullYear().toString())
 
   const [records, setRecords]     = useState([])
   const [summary, setSummary]     = useState([])
-  const [grid, setGrid]           = useState([])        // yearly grid data
+  const [grid, setGrid]           = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading]     = useState(true)
 
-  const [bulkMode, setBulkMode]         = useState(false)
-  const [bulkData, setBulkData]         = useState({})
+  const [bulkMode, setBulkMode]             = useState(false)
+  const [bulkData, setBulkData]             = useState({})
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
 
   const [modal, setModal]   = useState(null)
@@ -38,14 +36,14 @@ export default function Attendance() {
   const [importing, setImporting] = useState(false)
   const [importErr, setImportErr] = useState('')
 
-  // ── load ─────────────────────────────────────────────────────────────────
+  // ── load ──────────────────────────────────────────────────────────────────
   const load = async () => {
     setLoading(true)
     try {
       if (tab === 'daily') {
         const [attRes, empRes] = await Promise.all([
           api.get('/attendance', { params: { date } }),
-          api.get('/employees', { params: { status: 'active' } }),
+          api.get('/employees',  { params: { status: 'active' } }),
         ])
         setRecords(attRes.data)
         setEmployees(empRes.data)
@@ -63,7 +61,7 @@ export default function Attendance() {
 
   useEffect(() => { load() }, [tab, date, month, gridYear])
 
-  // ── daily helpers ─────────────────────────────────────────────────────────
+  // ── daily helpers ──────────────────────────────────────────────────────────
   const attMap = {}
   records.forEach(r => { attMap[r.employee_id] = r })
 
@@ -105,8 +103,8 @@ export default function Attendance() {
     const init = {}
     employees.forEach(e => {
       init[e.id] = {
-        status: attMap[e.id]?.status || 'present',
-        check_in: attMap[e.id]?.check_in || '',
+        status:    attMap[e.id]?.status    || 'present',
+        check_in:  attMap[e.id]?.check_in  || '',
         check_out: attMap[e.id]?.check_out || '',
       }
     })
@@ -117,11 +115,11 @@ export default function Attendance() {
   const submitBulk = async () => {
     setBulkSubmitting(true)
     try {
-      const records = Object.entries(bulkData).map(([id, d]) => ({
+      const recs = Object.entries(bulkData).map(([id, d]) => ({
         employee_id: id, status: d.status,
         check_in: d.check_in || null, check_out: d.check_out || null,
       }))
-      await api.post('/attendance/bulk', { att_date: date, records })
+      await api.post('/attendance/bulk', { att_date: date, records: recs })
       setBulkMode(false)
       load()
     } catch (err) {
@@ -131,25 +129,81 @@ export default function Attendance() {
     }
   }
 
-  // ── CSV export ─────────────────────────────────────────────────────────────
-  const exportCsv = async () => {
+  // ── XLSX export: one sheet per month ──────────────────────────────────────
+  const exportXlsx = async () => {
     try {
-      const res = await api.get('/attendance/export-csv', {
-        params: { year: gridYear },
-        responseType: 'blob'
-      })
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance-${gridYear}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
+      // Fetch full per-day attendance for the year
+      const res = await api.get('/attendance', { params: { } })
+      // Also make sure we have grid data
+      const gridRes = grid.length > 0 ? grid : (await api.get('/attendance/grid', { params: { year: gridYear } })).data
+
+      // Fetch all employees
+      const empRes = await api.get('/employees', { params: { status: 'active' } })
+      const allEmployees = empRes.data
+
+      // Fetch per-day records for the selected year by querying month by month
+      const wb = XLSX.utils.book_new()
+
+      for (let mi = 0; mi < 12; mi++) {
+        const mn = MONTH_NUMS[mi]
+        const monthLabel = MONTHS[mi]
+        const numDays = daysInMonth(parseInt(gridYear), mi)
+
+        // Fetch attendance records for this month
+        const monthStr = `${gridYear}-${mn}`
+        const attRes = await api.get('/attendance', { params: { month: monthStr } })
+        const attRecords = attRes.data
+
+        // Build a map: employee_id -> { day: status }
+        const dayMap = {}
+        attRecords.forEach(r => {
+          const day = parseInt(r.att_date.slice(8, 10))
+          const empId = r.employee_id
+          if (!dayMap[empId]) dayMap[empId] = {}
+          const s = r.status
+          dayMap[empId][day] = s === 'present' ? 'P' : s === 'half_day' ? 'H' : s === 'absent' ? 'A' : ''
+        })
+
+        // Build header row: Emp Code | Name | Designation | 1 | 2 | ... | 31 | Total P | Total H | Total A
+        const header = ['Emp Code', 'Name', 'Designation',
+          ...Array.from({ length: numDays }, (_, i) => i + 1),
+          'Total Present', 'Total Half Day', 'Total Absent'
+        ]
+
+        const sheetData = [header]
+
+        allEmployees.forEach(emp => {
+          const days = dayMap[emp.id] || {}
+          let totalP = 0, totalH = 0, totalA = 0
+          const dayCols = Array.from({ length: numDays }, (_, i) => {
+            const val = days[i + 1] || ''
+            if (val === 'P') totalP++
+            if (val === 'H') totalH++
+            if (val === 'A') totalA++
+            return val
+          })
+          sheetData.push([emp.emp_code, emp.name, emp.designation || '', ...dayCols, totalP, totalH, totalA])
+        })
+
+        const ws = XLSX.utils.aoa_to_sheet(sheetData)
+
+        // Column widths
+        ws['!cols'] = [
+          { wch: 10 }, { wch: 20 }, { wch: 16 },
+          ...Array.from({ length: numDays }, () => ({ wch: 4 })),
+          { wch: 13 }, { wch: 14 }, { wch: 12 }
+        ]
+
+        XLSX.utils.book_append_sheet(wb, ws, monthLabel)
+      }
+
+      XLSX.writeFile(wb, `attendance-${gridYear}.xlsx`)
     } catch (err) {
       alert('Export failed: ' + (err.response?.data?.error || err.message))
     }
   }
 
-  // ── CSV import ─────────────────────────────────────────────────────────────
+  // ── CSV import (same format as before) ────────────────────────────────────
   const handleImport = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -167,8 +221,7 @@ export default function Attendance() {
         if (!empCode) continue
 
         const months = {}
-        // Header pattern: "Jan Present", "Jan Half Day", "Jan Absent", ...
-        MONTHS.forEach((mName, idx) => {
+        MONTHS_SHORT.forEach((mName, idx) => {
           const mn = MONTH_NUMS[idx]
           const pIdx = header.indexOf(`${mName} Present`)
           const hIdx = header.indexOf(`${mName} Half Day`)
@@ -206,11 +259,9 @@ export default function Attendance() {
     total:   employees.length,
   } : null
 
-  // ── grid cell helper ───────────────────────────────────────────────────────
   const GridCell = ({ data }) => {
-    if (!data || (data.present === 0 && data.half_day === 0 && data.absent === 0)) {
+    if (!data || (data.present === 0 && data.half_day === 0 && data.absent === 0))
       return <span className="text-xs text-gray-300">—</span>
-    }
     return (
       <div className="text-xs leading-tight space-y-0.5">
         {data.present  > 0 && <div className="text-green-600 font-semibold">{data.present}P</div>}
@@ -233,7 +284,7 @@ export default function Attendance() {
         <div className="flex flex-wrap gap-2">
           {tab === 'grid' && (
             <>
-              <button onClick={exportCsv} className="btn-secondary">⬇ Export CSV</button>
+              <button onClick={exportXlsx} className="btn-secondary">⬇ Export Excel</button>
               <label className={`btn-secondary cursor-pointer ${importing ? 'opacity-50' : ''}`}>
                 {importing ? 'Importing…' : '⬆ Import CSV'}
                 <input type="file" accept=".csv" onChange={handleImport} className="hidden" disabled={importing} />
@@ -303,10 +354,10 @@ export default function Attendance() {
       {tab === 'daily' && stats && (
         <div className="flex flex-wrap gap-3">
           {[
-            { label: 'Total',    value: stats.total,                                      color: 'bg-gray-100 text-gray-700' },
-            { label: 'Present',  value: stats.present,                                    color: 'bg-green-100 text-green-700' },
-            { label: 'Absent',   value: stats.absent,                                     color: 'bg-red-100 text-red-700' },
-            { label: 'Half Day', value: stats.half,                                       color: 'bg-yellow-100 text-yellow-700' },
+            { label: 'Total',    value: stats.total,   color: 'bg-gray-100 text-gray-700' },
+            { label: 'Present',  value: stats.present, color: 'bg-green-100 text-green-700' },
+            { label: 'Absent',   value: stats.absent,  color: 'bg-red-100 text-red-700' },
+            { label: 'Half Day', value: stats.half,    color: 'bg-yellow-100 text-yellow-700' },
             { label: 'Unmarked', value: stats.total - stats.present - stats.absent - stats.half, color: 'bg-orange-100 text-orange-700' },
           ].map(s => (
             <div key={s.label} className={`${s.color} px-4 py-2 rounded-xl text-sm font-semibold`}>
@@ -335,9 +386,7 @@ export default function Attendance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {rows.length === 0 && (
-                      <tr><td colSpan={7}><Empty msg="No employees found" /></td></tr>
-                    )}
+                    {rows.length === 0 && <tr><td colSpan={7}><Empty msg="No employees found" /></td></tr>}
                     {rows.map(emp => (
                       <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="table-cell">
@@ -350,7 +399,7 @@ export default function Attendance() {
                             <select value={bulkData[emp.id]?.status || 'present'}
                               onChange={e => setBulkData(p => ({ ...p, [emp.id]: { ...p[emp.id], status: e.target.value } }))}
                               className="input text-xs py-1 w-28">
-                              {STATUS_OPTS.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                              {STATUS_OPTS.map(s => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
                             </select>
                           ) : (
                             emp.att ? <Badge status={emp.att.status} /> : <span className="badge-gray">Unmarked</span>
@@ -389,7 +438,7 @@ export default function Attendance() {
             </div>
           )}
 
-          {/* ── Monthly Summary View ── */}
+          {/* ── Monthly Summary ── */}
           {tab === 'monthly' && (
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
@@ -405,9 +454,7 @@ export default function Attendance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {summary.length === 0 && (
-                      <tr><td colSpan={6}><Empty msg="No attendance data for this month" /></td></tr>
-                    )}
+                    {summary.length === 0 && <tr><td colSpan={6}><Empty msg="No attendance data for this month" /></td></tr>}
                     {summary.map(s => (
                       <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="table-cell">
@@ -429,7 +476,7 @@ export default function Attendance() {
             </div>
           )}
 
-          {/* ── Yearly Grid View ── */}
+          {/* ── Yearly Grid ── */}
           {tab === 'grid' && (
             <div className="card overflow-hidden">
               {grid.length === 0 ? (
@@ -440,7 +487,7 @@ export default function Attendance() {
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
                         <th className="table-header text-left sticky left-0 bg-gray-50 z-10 min-w-[160px]">Employee</th>
-                        {MONTHS.map(m => (
+                        {MONTHS_SHORT.map(m => (
                           <th key={m} className="table-header text-center min-w-[70px]">{m}</th>
                         ))}
                         <th className="table-header text-center min-w-[80px]">Total P</th>
@@ -450,9 +497,8 @@ export default function Attendance() {
                       {grid.map(emp => {
                         const totalPresent = MONTH_NUMS.reduce((sum, mn) => {
                           const m = emp.months[mn]
-                          return sum + (m ? m.present + (m.half_day * 0.5) : 0)
+                          return sum + (m ? m.present + m.half_day * 0.5 : 0)
                         }, 0)
-
                         return (
                           <tr key={emp.employee_id} className="hover:bg-orange-50/30 transition-colors">
                             <td className="table-cell sticky left-0 bg-white z-10">
@@ -476,7 +522,7 @@ export default function Attendance() {
               )}
               <div className="p-3 border-t border-gray-100 bg-gray-50">
                 <p className="text-xs" style={{color:'var(--muted)'}}>
-                  Use <strong>Export CSV</strong> to download this grid · <strong>Import CSV</strong> to bulk-upload using the same format
+                  <strong>Export Excel</strong> downloads a .xlsx file with one sheet per month, showing each employee's daily attendance (P/H/A) · <strong>Import CSV</strong> to bulk-upload using the summary CSV format
                 </p>
               </div>
             </div>
@@ -484,7 +530,7 @@ export default function Attendance() {
         </>
       )}
 
-      {/* Mark/Edit Attendance Modal */}
+      {/* Mark/Edit Modal */}
       <Modal open={!!modal} onClose={() => setModal(null)}
         title={`${modal?.att ? 'Edit' : 'Mark'} Attendance — ${modal?.emp_name}`}>
         <div className="space-y-4">
@@ -499,12 +545,11 @@ export default function Attendance() {
                         : 'bg-yellow-400 text-white border-yellow-400'
                       : 'border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}>
-                  {s.replace('_', ' ')}
+                  {s.replace('_',' ')}
                 </button>
               ))}
             </div>
           </FormField>
-
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Check In">
               <input type="time" value={form.check_in}
@@ -515,7 +560,6 @@ export default function Attendance() {
                 onChange={e => setForm(p => ({ ...p, check_out: e.target.value }))} className="input" />
             </FormField>
           </div>
-
           {form.status === 'half_day' && (
             <FormField label="Half Day Reason">
               <input type="text" value={form.half_day_reason}
@@ -523,7 +567,6 @@ export default function Attendance() {
                 placeholder="Reason…" className="input" />
             </FormField>
           )}
-
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setModal(null)} className="btn-secondary">Cancel</button>
             <button onClick={saveAttendance} disabled={saving} className="btn-primary">
