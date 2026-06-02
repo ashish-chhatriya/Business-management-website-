@@ -204,20 +204,36 @@ export default function Attendance() {
   }
 
   // ── CSV import (same format as before) ────────────────────────────────────
+  // ── Excel/CSV import ─────────────────────────────────────────────────────────
   const handleImport = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImporting(true)
     setImportErr('')
+    
     try {
-      const text = await file.text()
-      const lines = text.trim().split('\n')
-      const header = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data, { type: 'array' })
+      
+      // Grab the first sheet, regardless of how many exist
+      const firstSheetName = workbook.SheetNames[0]
+      const worksheet = workbook.Sheets[firstSheetName]
+      
+      // Convert sheet to an array of objects
+      // Using header: 1 gives us an array of arrays (like lines in a CSV)
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+      
+      if (rows.length < 2) throw new Error("File appears to be empty or missing data rows.")
+
+      const header = rows[0].map(h => String(h).trim())
 
       const csvRows = []
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
-        const empCode = values[0]
+      for (let i = 1; i < rows.length; i++) {
+        const values = rows[i]
+        // Skip completely empty rows
+        if (!values || values.length === 0) continue 
+        
+        const empCode = String(values[0] || '').trim()
         if (!empCode) continue
 
         const months = {}
@@ -226,6 +242,7 @@ export default function Attendance() {
           const pIdx = header.indexOf(`${mName} Present`)
           const hIdx = header.indexOf(`${mName} Half Day`)
           const aIdx = header.indexOf(`${mName} Absent`)
+          
           months[mn] = {
             present:  pIdx >= 0 ? (parseInt(values[pIdx])  || 0) : 0,
             half_day: hIdx >= 0 ? (parseInt(values[hIdx]) || 0) : 0,
@@ -244,7 +261,7 @@ export default function Attendance() {
       alert(msg)
       load()
     } catch (err) {
-      setImportErr(err.response?.data?.error || err.message)
+      setImportErr(err.response?.data?.error || err.message || "Failed to process file")
     } finally {
       setImporting(false)
       e.target.value = ''
@@ -287,7 +304,7 @@ export default function Attendance() {
               <button onClick={exportXlsx} className="btn-secondary">⬇ Export Excel</button>
               <label className={`btn-secondary cursor-pointer ${importing ? 'opacity-50' : ''}`}>
                 {importing ? 'Importing…' : '⬆ Import CSV'}
-                <input type="file" accept=".csv" onChange={handleImport} className="hidden" disabled={importing} />
+                <input type="file" accept=".csv, .xlsx" onChange={handleImport} className="hidden" disabled={importing} />
               </label>
             </>
           )}
