@@ -22,10 +22,27 @@ const parseCsvBuffer = (buffer) => new Promise((resolve, reject) => {
     .on('end', () => resolve(rows));
 });
 
-const isValidDate = (value) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+// Accepts: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY
+// Always returns YYYY-MM-DD for the database, or null if invalid
+const normalizeDate = (value) => {
+  const s = String(value || '').trim();
+  if (!s) return null;
+
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null;
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) {
+    const iso = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    const d = new Date(`${iso}T00:00:00Z`);
+    return !isNaN(d.getTime()) ? iso : null;
+  }
+
+  return null;
 };
 
 const normalizeTime = (value) => {
@@ -222,13 +239,13 @@ router.post('/import', auth, scopeDomain, upload.single('file'), async (req, res
 
     parsedRows.forEach((row, index) => {
       const rowNumber = index + 2;
-      const date = String(row.date || '').trim();
+      const date = normalizeDate(row.date);   // accepts DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
       const saleTime = normalizeTime(row.time);
       const shop = String(row.shop || '').trim();
       const total = Number(row.total);
       const mode = String(row.mode || '').trim();
 
-      if (!isValidDate(date)) failures.push({ row: rowNumber, error: 'Invalid date. Use YYYY-MM-DD.' });
+      if (!date) failures.push({ row: rowNumber, error: 'Invalid date. Accepted formats: DD/MM/YYYY or YYYY-MM-DD.' });
       else if (!saleTime) failures.push({ row: rowNumber, error: 'Invalid time. Use HH:mm.' });
       else if (!shop) failures.push({ row: rowNumber, error: 'Shop is required.' });
       else if (!Number.isFinite(total) || total <= 0) failures.push({ row: rowNumber, error: 'Total must be greater than 0.' });
